@@ -1,61 +1,61 @@
 """
-Pydantic schemas for Booking Requests — request/response validation.
+Booking Request model — patient service booking / lead-generation requests.
 
-Schema reference: SRS Section 9.7 (booking_requests table) + Section 10.7 (API)
+Schema reference: SRS Section 9.7 (booking_requests table)
 Owner: Ayesha Nazish
 """
 
-import re
+import enum
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
-
-from app.models.booking import BookingStatus
-
-# Basic international-friendly phone pattern: optional +, 7-15 digits.
-PHONE_REGEX = re.compile(r"^\+?[0-9]{7,15}$")
+from sqlalchemy import String, Text, Integer, DateTime, ForeignKey, Enum, func
+from sqlalchemy.orm import Mapped, mapped_column
+from app.database import Base
 
 
-class BookingRequestCreate(BaseModel):
+class BookingStatus(str, enum.Enum):
+    """Status lifecycle for a booking request (Section 9.7)."""
+    pending = "pending"
+    contacted = "contacted"
+    completed = "completed"
+
+
+class BookingRequest(Base):
     """
-    Payload for POST /booking-requests (public, rate-limited).
-    This is a lead-generation form, not a scheduling engine —
-    preferred_date stays free text (Section 4).
+    Represents a lead-generation booking submitted from the public
+    "Book Now" modal on Services / Service Detail pages.
     """
 
-    full_name: str = Field(..., min_length=1, max_length=150)
-    phone: str = Field(..., max_length=50)
-    email: EmailStr | None = None
-    service_id: int | None = None
-    preferred_date: str | None = Field(default=None, max_length=50)
-    message: str | None = None
+    __tablename__ = "booking_requests"
 
-    @field_validator("phone")
-    @classmethod
-    def validate_phone(cls, value: str) -> str:
-        """Reject obviously malformed phone numbers (Section 10.16 — global validation rules)."""
-        if not PHONE_REGEX.match(value):
-            raise ValueError("Invalid phone number format. Use digits only, optionally prefixed with '+'.")
-        return value
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
+    full_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    phone: Mapped[str] = mapped_column(String(50), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(150), nullable=True)
 
-class BookingRequestStatusUpdate(BaseModel):
-    """Payload for PATCH /admin/booking-requests/{id}/status."""
-    status: BookingStatus
+    service_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("services.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
+    preferred_date: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-class BookingRequestOut(BaseModel):
-    """Response schema for admin GET /admin/booking-requests."""
+    status: Mapped[BookingStatus] = mapped_column(
+        Enum(BookingStatus, name="booking_status"),
+        default=BookingStatus.pending,
+        server_default="pending",
+        nullable=False,
+    )
 
-    model_config = ConfigDict(from_attributes=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
-    id: int
-    full_name: str
-    phone: str
-    email: str | None
-    service_id: int | None
-    preferred_date: str | None
-    message: str | None
-    status: BookingStatus
-    created_at: datetime
-    updated_at: datetime
+    def __repr__(self) -> str:
+        return f"<BookingRequest id={self.id} name={self.full_name!r} status={self.status}>"
