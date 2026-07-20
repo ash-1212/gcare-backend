@@ -20,12 +20,16 @@ class RateLimiter:
     Sliding-window rate limiter keyed by client IP.
 
     Usage as a FastAPI dependency:
-        @router.post("/booking-requests", dependencies=[Depends(RateLimiter(max_requests=5, window_seconds=60))])
+        @router.post(
+            "/booking-requests",
+            dependencies=[Depends(RateLimiter(max_requests=5, window_seconds=60))]
+        )
     """
 
     def __init__(self, max_requests: int = 5, window_seconds: int = 60):
         self.max_requests = max_requests
         self.window_seconds = window_seconds
+
         # Maps client IP -> list of request timestamps within the current window
         self._requests: dict[str, list[float]] = defaultdict(list)
 
@@ -33,17 +37,21 @@ class RateLimiter:
         client_ip = self._get_client_ip(request)
         now = time.time()
 
-        # Drop timestamps outside the current sliding window
+        # Remove timestamps outside the current sliding window
         self._requests[client_ip] = [
-            ts for ts in self._requests[client_ip] if now - ts < self.window_seconds
+            ts
+            for ts in self._requests[client_ip]
+            if now - ts < self.window_seconds
         ]
 
+        # Reject requests that exceed the configured limit
         if len(self._requests[client_ip]) >= self.max_requests:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Too many requests. Please try again later.",
             )
 
+        # Record the current request
         self._requests[client_ip].append(now)
 
     @staticmethod
@@ -55,4 +63,5 @@ class RateLimiter:
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
             return forwarded.split(",")[0].strip()
-        return request.client.host if request.client else "unknown" 
+
+        return request.client.host if request.client else "unknown"
