@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.models._test_service_placeholder import Service  # noqa: F401 — ensures 'services' table is registered for FK resolution
 
 from app.api.v1 import branches, bookings, faqs, testimonials, contact, newsletter, settings
 
