@@ -21,9 +21,6 @@ alembic/__pycache__/
 .DS_Store
 Thumbs.db
 
-# Test artifacts
-test_connection.py
-fix_db.py
 
 # Logs
 *.log
